@@ -1,0 +1,6 @@
+@Genealogy.API_HostAddress = http://localhost:5240
+
+GET {{Genealogy.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
