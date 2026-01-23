@@ -124,20 +124,29 @@ public class RelationshipService : IRelationshipService
 
 	private async Task ValidateParentChildAsync(RelationshipCreateDto dto)
 	{
-		// Человек не может быть своим предком
+		// PersonId — ребенок, RelatedPersonId — родитель
+		// 1. Ребенок не может быть своим предком (прямая проверка на цикл).
 		if (await IsAncestorAsync(dto.PersonId, dto.RelatedPersonId))
-			throw new ArgumentException("Person cannot be ancestor of themselves");
+			throw new ArgumentException("Cannot create relationship: child is an ancestor of the parent (cycle detected).");
+		// 2. Родитель не может быть своим потомком (обратная проверка на цикл).
+		if (await IsAncestorAsync(dto.RelatedPersonId, dto.PersonId))
+			throw new ArgumentException("Cannot create relationship: parent is already a descendant of the child (cycle detected).");
 	}
 
 	private async Task ValidateSpouseAsync(RelationshipCreateDto dto)
 	{
-		// Проверяем, что у человека нет другого супруга
-		var hasSpouse = await _context.Relationships
+		// Проверяем, что у ОБОИХ персон еще нет супруга
+		var personHasSpouse = await _context.Relationships
 			.AnyAsync(r => (r.PersonId == dto.PersonId || r.RelatedPersonId == dto.PersonId) &&
 						r.RelationshipType == RelationshipType.Spouse);
-		
-		if (hasSpouse)
-			throw new ArgumentException("Person already has a spouse");
+		var relatedHasSpouse = await _context.Relationships
+			.AnyAsync(r => (r.PersonId == dto.RelatedPersonId || r.RelatedPersonId == dto.RelatedPersonId) &&
+						r.RelationshipType == RelationshipType.Spouse);
+
+		if (personHasSpouse)
+			throw new ArgumentException($"Person with ID {dto.PersonId} already has a spouse.");
+		if (relatedHasSpouse)
+			throw new ArgumentException($"Person with ID {dto.RelatedPersonId} already has a spouse.");
 	}
 
 	private async Task ValidateSiblingAsync(RelationshipCreateDto dto)
