@@ -9,5 +9,5 @@ public interface IRelationshipService
     Task<IEnumerable<RelationshipDto>> GetRelationshipsByPersonIdAsync(int personId);
     Task<RelationshipDto> UpdateRelationshipAsync(int id, RelationshipUpdateDto relationshipUpdateDto);
     Task<bool> DeleteRelationshipAsync(int id);
-    Task<bool> ValidateRelationshipAsync(RelationshipCreateDto relationshipCreateDto);
+    //Task<bool> ValidateRelationshipAsync(RelationshipCreateDto relationshipCreateDto);
 }
