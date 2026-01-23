@@ -128,4 +128,46 @@ public class PersonsController : ControllerBase
             return StatusCode(500, new { message = "Internal server error", error = ex.Message });
         }
     }
+
+	[HttpGet("{id}/children")]
+	public async Task<ActionResult<IEnumerable<PersonDto>>> GetChildren(int id)
+	{
+		try
+		{
+			var children = await _personService.GetChildrenAsync(id);
+			return Ok(children);
+		}
+		catch (KeyNotFoundException ex)
+		{
+			return NotFound(new { message = ex.Message });
+		}
+	}
+
+	[HttpGet("{id}/parents")]
+	public async Task<ActionResult<IEnumerable<PersonDto>>> GetParents(int id)
+	{
+		try
+		{
+			var parents = await _personService.GetParentsAsync(id);
+			return Ok(parents);
+		}
+		catch (KeyNotFoundException ex)
+		{
+			return NotFound(new { message = ex.Message });
+		}
+	}
+
+	[HttpGet("{id}/siblings")]
+	public async Task<ActionResult<IEnumerable<PersonDto>>> GetSiblings(int id)
+	{
+		try
+		{
+			var siblings = await _personService.GetSiblingsAsync(id);
+			return Ok(siblings);
+		}
+		catch (KeyNotFoundException ex)
+		{
+			return NotFound(new { message = ex.Message });
+		}
+	}
 }

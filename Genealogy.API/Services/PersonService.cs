@@ -124,6 +124,61 @@ public class PersonService : IPersonService
         return persons.Select(MapToDto);
     }
 
+	public async Task<IEnumerable<PersonDto>> GetChildrenAsync(int personId)
+	{
+		var childrenIds = await _context.Relationships
+			.Where(r => r.RelationshipType == RelationshipType.ParentChild &&
+					r.RelatedPersonId == personId)
+			.Select(r => r.PersonId)
+			.ToListAsync();
+		
+		return await GetPersonsByIdsAsync(childrenIds);
+	}
+
+	public async Task<IEnumerable<PersonDto>> GetParentsAsync(int personId)
+	{
+		var parentIds = await _context.Relationships
+			.Where(r => r.RelationshipType == RelationshipType.ParentChild &&
+					r.PersonId == personId)
+			.Select(r => r.RelatedPersonId)
+			.ToListAsync();
+		
+		return await GetPersonsByIdsAsync(parentIds);
+	}
+
+	public async Task<IEnumerable<PersonDto>> GetSiblingsAsync(int personId)
+	{
+		// 1. Находим родителей
+		var parentIds = await _context.Relationships
+			.Where(r => r.RelationshipType == RelationshipType.ParentChild &&
+					r.PersonId == personId)
+			.Select(r => r.RelatedPersonId)
+			.ToListAsync();
+		
+		// 2. Находим других детей этих родителей
+		var siblingIds = await _context.Relationships
+			.Where(r => r.RelationshipType == RelationshipType.ParentChild &&
+					parentIds.Contains(r.RelatedPersonId) &&
+					r.PersonId != personId)
+			.Select(r => r.PersonId)
+			.Distinct()
+			.ToListAsync();
+		
+		return await GetPersonsByIdsAsync(siblingIds);
+	}
+
+	private async Task<IEnumerable<PersonDto>> GetPersonsByIdsAsync(List<int> ids)
+	{
+		if (!ids.Any())
+			return new List<PersonDto>();
+		
+		var persons = await _context.Persons
+			.Where(p => ids.Contains(p.Id))
+			.ToListAsync();
+		
+		return persons.Select(MapToDto);
+	}
+
     private static PersonDto MapToDto(Person person) => new()
     {
         Id = person.Id,
