@@ -108,17 +108,5 @@ public class RelationshipsController : ControllerBase
         }
     }
 
-    [HttpPost("validate")]
-    public async Task<ActionResult<bool>> ValidateRelationship(RelationshipCreateDto relationshipCreateDto)
-    {
-        try
-        {
-            var isValid = await _relationshipService.ValidateRelationshipAsync(relationshipCreateDto);
-            return Ok(isValid);
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
-        }
-    }
+    
 }
