@@ -16,31 +16,24 @@ public class RelationshipService : IRelationshipService
     }
 
     public async Task<RelationshipDto> CreateRelationshipAsync(RelationshipCreateDto relationshipCreateDto)
-    {
-        // Проверяем, что оба человека существуют
-        var personExists = await _context.Persons.AnyAsync(p => p.Id == relationshipCreateDto.PersonId);
-        var relatedPersonExists = await _context.Persons.AnyAsync(p => p.Id == relationshipCreateDto.RelatedPersonId);
+	{
+		// 1. Валидация базовых правил
+		await ValidateRelationshipAsync(relationshipCreateDto);
+		
+		// 2. Создание связи
+		var relationship = new Relationship
+		{
+			PersonId = relationshipCreateDto.PersonId,
+			RelatedPersonId = relationshipCreateDto.RelatedPersonId,
+			RelationshipType = relationshipCreateDto.RelationshipType,
+			Note = relationshipCreateDto.Note
+		};
 
-        if (!personExists || !relatedPersonExists)
-            throw new KeyNotFoundException("One or both persons not found");
+		_context.Relationships.Add(relationship);
+		await _context.SaveChangesAsync();
 
-        // Проверяем, что связь не является самоссылкой
-        if (relationshipCreateDto.PersonId == relationshipCreateDto.RelatedPersonId)
-            throw new ArgumentException("Cannot create relationship to the same person");
-
-        var relationship = new Relationship
-        {
-            PersonId = relationshipCreateDto.PersonId,
-            RelatedPersonId = relationshipCreateDto.RelatedPersonId,
-            RelationshipType = relationshipCreateDto.RelationshipType,
-            Note = relationshipCreateDto.Note
-        };
-
-        _context.Relationships.Add(relationship);
-        await _context.SaveChangesAsync();
-
-        return MapToDto(relationship);
-    }
+		return MapToDto(relationship);
+	}
 
     public async Task<RelationshipDto> GetRelationshipByIdAsync(int id)
     {
@@ -92,27 +85,96 @@ public class RelationshipService : IRelationshipService
         return true;
     }
 
-    public async Task<bool> ValidateRelationshipAsync(RelationshipCreateDto relationshipCreateDto)
-    {
-        // Проверяем, что оба человека существуют
-        var personExists = await _context.Persons.AnyAsync(p => p.Id == relationshipCreateDto.PersonId);
-        var relatedPersonExists = await _context.Persons.AnyAsync(p => p.Id == relationshipCreateDto.RelatedPersonId);
+    private async Task ValidateRelationshipAsync(RelationshipCreateDto dto)
+	{
+		// 1. Нельзя создать связь с самим собой
+		if (dto.PersonId == dto.RelatedPersonId)
+			throw new ArgumentException("Cannot create relationship to self");
+		
+		// 2. Проверяем существование персон
+		var personExists = await _context.Persons.AnyAsync(p => p.Id == dto.PersonId);
+		var relatedExists = await _context.Persons.AnyAsync(p => p.Id == dto.RelatedPersonId);
+		
+		if (!personExists || !relatedExists)
+			throw new KeyNotFoundException("One or both persons not found");
+		
+		// 3. Проверяем дублирование связи
+		var exists = await _context.Relationships
+			.AnyAsync(r => r.PersonId == dto.PersonId && 
+						r.RelatedPersonId == dto.RelatedPersonId &&
+						r.RelationshipType == dto.RelationshipType);
+		
+		if (exists)
+			throw new ArgumentException("Relationship already exists");
+		
+		// 4. Валидация по типу связи
+		switch (dto.RelationshipType)
+		{
+			case RelationshipType.ParentChild:
+				await ValidateParentChildAsync(dto);
+				break;
+			case RelationshipType.Spouse:
+				await ValidateSpouseAsync(dto);
+				break;
+			case RelationshipType.Sibling:
+				await ValidateSiblingAsync(dto);
+				break;
+		}
+	}
 
-        if (!personExists || !relatedPersonExists)
-            return false;
+	private async Task ValidateParentChildAsync(RelationshipCreateDto dto)
+	{
+		// Человек не может быть своим предком
+		if (await IsAncestorAsync(dto.PersonId, dto.RelatedPersonId))
+			throw new ArgumentException("Person cannot be ancestor of themselves");
+	}
 
-        // Проверяем, что связь не является самоссылкой
-        if (relationshipCreateDto.PersonId == relationshipCreateDto.RelatedPersonId)
-            return false;
+	private async Task ValidateSpouseAsync(RelationshipCreateDto dto)
+	{
+		// Проверяем, что у человека нет другого супруга
+		var hasSpouse = await _context.Relationships
+			.AnyAsync(r => (r.PersonId == dto.PersonId || r.RelatedPersonId == dto.PersonId) &&
+						r.RelationshipType == RelationshipType.Spouse);
+		
+		if (hasSpouse)
+			throw new ArgumentException("Person already has a spouse");
+	}
 
-        // Проверяем, что такая связь еще не существует
-        var existingRelationship = await _context.Relationships
-            .FirstOrDefaultAsync(r => r.PersonId == relationshipCreateDto.PersonId && 
-                                      r.RelatedPersonId == relationshipCreateDto.RelatedPersonId &&
-                                      r.RelationshipType == relationshipCreateDto.RelationshipType);
+	private async Task ValidateSiblingAsync(RelationshipCreateDto dto)
+	{
+		// Для братьев/сестер нужен общий родитель
+		var personParents = await GetParentIdsAsync(dto.PersonId);
+		var relatedParents = await GetParentIdsAsync(dto.RelatedPersonId);
+		
+		if (!personParents.Intersect(relatedParents).Any())
+			throw new ArgumentException("Siblings must have at least one common parent");
+	}
 
-        return existingRelationship == null;
-    }
+	private async Task<List<int>> GetParentIdsAsync(int personId)
+	{
+		return await _context.Relationships
+			.Where(r => r.PersonId == personId && 
+					r.RelationshipType == RelationshipType.ParentChild)
+			.Select(r => r.RelatedPersonId)
+			.ToListAsync();
+	}
+
+	private async Task<bool> IsAncestorAsync(int potentialAncestorId, int personId)
+	{
+		// Рекурсивно проверяем родителей
+		var parents = await GetParentIdsAsync(personId);
+		
+		foreach (var parentId in parents)
+		{
+			if (parentId == potentialAncestorId)
+				return true;
+			
+			if (await IsAncestorAsync(potentialAncestorId, parentId))
+				return true;
+		}
+		
+		return false;
+	}
 
     private static RelationshipDto MapToDto(Relationship relationship) => new()
     {
